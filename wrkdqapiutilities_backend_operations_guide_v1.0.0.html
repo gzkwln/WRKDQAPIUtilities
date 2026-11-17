@@ -1,0 +1,173 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WRKDQAPIUtilities Backend Guide</title><style>
+:root{--p:#5c43d6;--pd:#392b91;--ink:#1d2939;--line:#d9dce5;--bg:#f5f6fa}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Segoe UI,Arial,sans-serif}header{position:fixed;inset:0 0 auto 0;height:68px;background:linear-gradient(120deg,var(--pd),var(--p));color:#fff;display:flex;align-items:center;padding:0 24px;z-index:4}header h1{font-size:20px;margin:0}header small{margin-left:12px;opacity:.8}#search{margin-left:auto;width:375px;padding:10px;border:0;border-radius:8px}aside{position:fixed;top:68px;bottom:0;width:320px;background:#fff;border-right:1px solid var(--line);overflow:auto;padding:14px}aside a{display:block;padding:8px 10px;color:var(--ink);text-decoration:none;border-radius:7px}aside a:hover{background:#f0edff;color:var(--pd)}main{margin-left:320px;padding:88px 32px 50px;max-width:1500px}section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 26px;margin-bottom:18px;box-shadow:0 2px 8px #1018280a}h2{color:var(--pd);margin-top:0}h3{color:#284d78}.flow,.note,.warn{padding:14px 16px;border-radius:8px;margin:14px 0}.flow{background:#edf4ff;border-left:4px solid #3973bd}.flow span{color:#596579}.note{background:#f0edff;border-left:4px solid var(--p)}.warn{background:#fff3e8;border-left:4px solid #e47718}table{border-collapse:collapse;width:100%;display:table;margin:12px 0}th,td{border:1px solid var(--line);padding:9px;vertical-align:top;text-align:left}th{background:var(--pd);color:#fff}pre{position:relative;background:#172033;color:#eaf0f7;padding:18px;overflow:auto;border-radius:9px;white-space:pre;tab-size:4}pre code{font:13px/1.5 Consolas,monospace}.copy{position:sticky;float:right;top:0;border:1px solid #8994a4;background:#27334a;color:white;border-radius:5px;padding:5px 9px;cursor:pointer}.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}.cards>div{border:1px solid var(--line);border-radius:10px;padding:15px;background:#fafbff}.checks{list-style:none;padding:0}.checks li{padding:6px}input[type=checkbox]{accent-color:var(--p);width:17px;height:17px;vertical-align:-3px}.done{text-decoration:line-through;color:#778}.hidden{display:none}@media(max-width:900px){aside{display:none}main{margin-left:0;padding:86px 12px}#search{width:42vw}.cards{grid-template-columns:1fr}}@media print{header,aside,.copy{display:none}main{margin:0;padding:0}section{border:0;box-shadow:none;break-inside:avoid}pre{white-space:pre-wrap;color:#000;background:#f3f3f3}}</style></head><body>
+<header><h1>WRKDQAPIUtilities</h1><small>Backend Deployment & Operations</small><input id="search" placeholder="Search objects, procedures or steps..."></header><aside><a href="#s1" data-q="1. purpose and architecture">1. Purpose and architecture</a><a href="#s2" data-q="2. prerequisites">2. Prerequisites</a><a href="#s3" data-q="3. configure getapiresults">3. Configure GETAPIRESULTS</a><a href="#s4" data-q="4. understand the transformation layer">4. Understand the transformation layer</a><a href="#s5" data-q="5. choose the execution model">5. Choose the execution model</a><a href="#s6" data-q="6. semi-automated weekly process">6. Semi-automated weekly process</a><a href="#s7" data-q="7. fully automated execution">7. Fully automated execution</a><a href="#s8" data-q="8. proxy execution variant">8. Proxy execution variant</a><a href="#s9" data-q="9. validation after each run">9. Validation after each run</a><a href="#s10" data-q="10. operational troubleshooting">10. Operational troubleshooting</a><a href="#s11" data-q="11. deployment and handover checklist">11. Deployment and handover checklist</a></aside><main><section><h2>How to use this guide</h2><p>Follow sections 2–5 for deployment decisions, then use section 6 for the semi-automated weekly process or section 7 for the SQL-driven automated process. Checklists persist locally in this browser.</p><div class="warn"><b>Redaction applied:</b> plaintext secrets, credentials and project-specific SQL server details present in the source runbook are not reproduced.</div></section><section id="s1"><h2>1. Purpose and architecture</h2>
+<p>This guide consolidates the backend deployment and operating instructions for <strong>WRKDQAPIUtilities</strong>. It is intended for a technical user who understands SQL Server, PowerShell and SKP concepts but has not previously operated this solution.</p>
+<div class="flow"><b>Syniti APIs</b> → <b>GETAPIRESULTS / ApiResults</b> → <b>ImportJSONFile_* views</b> → <b>JSON_* tables</b> → <b>consumption views</b> → <b>Cloud Construct dashboard</b><br><span>Each execution can additionally archive raw/API and transformed data into *_History tables for trend reporting.</span></div>
+</section><section id="s2"><h2>2. Prerequisites</h2>
+<ul class="checks">
+<li><label><input type="checkbox"> Deploy the WRKDQAPIUtilities schema in the target SQL Server.</label></li>
+<li><label><input type="checkbox"> Confirm SKP/SQL connectivity and database permissions.</label></li>
+<li><label><input type="checkbox"> Obtain Syniti API credentials through the approved internal Cloud Ops/support process.</label></li>
+<li><label><input type="checkbox"> Validate the required SQL CLR assembly package is present if using SQL-driven API execution.</label></li>
+<li><label><input type="checkbox"> Enable CLR only when the target execution mode requires it and the DBA/security policy permits it.</label></li>
+<li><label><input type="checkbox"> Confirm Cloud Construct and the dashboard-facing SQL views are deployed.</label></li>
+<li><label><input type="checkbox"> Decide execution mode: fully automated SQL stored procedure or semi-automated PowerShell ingestion.</label></li>
+</ul>
+<div class="warn"><b>Security:</b> API usernames, API passwords, SQL usernames, SQL passwords, proxy credentials and project server addresses from the source documentation are deliberately omitted from this guide. Supply destination values through approved secrets/configuration handling. Do not hard-code production credentials into a reusable HTML or script.</div>
+</section><section id="s3"><h2>3. Configure GETAPIRESULTS</h2>
+<p><code>GETAPIRESULTS</code> is the central API configuration/result table. For the destination environment, populate or verify at least:</p>
+<table><tr><th>Field</th><th>Purpose</th><th>Deployment action</th></tr>
+<tr><td>ExtractID</td><td>Logical execution/configuration set</td><td>Use the intended ID, e.g. <code>TEST</code> only where that convention is still valid.</td></tr>
+<tr><td>TENANTID</td><td>Destination SKP tenant context</td><td>Replace source-environment value.</td></tr>
+<tr><td>APIUsername</td><td>API credential identity</td><td>Use the value provided for the destination.</td></tr>
+<tr><td>APIPassword</td><td>API secret</td><td>Do not document in plaintext.</td></tr>
+<tr><td>URL / URLEXTENSION</td><td>Endpoint configuration</td><td>Validate against the supported Syniti v3 API endpoints.</td></tr>
+<tr><td>TABLENAME / TableOrder / Active</td><td>Processing metadata</td><td>Validate before first execution.</td></tr></table>
+<div class="note">If multiple extraction processes must coexist while retaining previous API results, use distinct <code>ExtractID</code> configurations rather than overwriting an active configuration.</div>
+</section><section id="s4"><h2>4. Understand the transformation layer</h2>
+<ol><li>API payloads are stored as JSON in <code>GETAPIRESULTS.GETRESULTS</code>.</li>
+<li><code>ImportJSONFile_* </code> views parse and expose JSON attributes as relational columns.</li>
+<li><code>webKnowledgeTierExtract_JSON_TABLES_Ins</code> inserts the transformed rows into the corresponding <code>JSON_*</code> tables.</li>
+<li>Consumption views, with <code>APIResults_Combined</code> as an important starting point, combine the JSON tables and apply dashboard filtering/business logic.</li>
+<li><code>*_History</code> tables retain execution snapshots used by weekly trend reporting.</li></ol>
+<div class="warn"><b>API schema changes:</b> if a new API version introduces fields required by the dashboard, update both the relevant <code>ImportJSONFile_*</code> parser view and the target <code>JSON_*</code> table (and history table where applicable).</div>
+</section><section id="s5"><h2>5. Choose the execution model</h2>
+<div class="cards"><div><h3>A. Fully automated</h3><p>Use when SQL CLR/API execution is approved and tested.</p><p>Schedule <code>DQReportsGeneralData_Ins</code>. The documented design runs the APIs for the configured extraction ID, transforms JSON into the JSON tables and saves history.</p></div>
+<div><h3>B. Semi-automated</h3><p>Use when API calls cannot be made directly from SQL.</p><p>Run a PowerShell extraction on an approved server, insert raw payloads into <code>ApiResults</code>, and then execute the SQL archival/transformation steps.</p></div></div>
+</section><section id="s6"><h2>6. Semi-automated weekly process</h2>
+<h3>Step 6.1 — Clear staging data</h3>
+<pre><button class="copy">Copy</button><code>USE [WRKDQAPIUtilities];
+GO
+DELETE FROM [dbo].[ApiResults];</code></pre>
+<p>Clear only the staging table before a new extraction. History tables are not cleared.</p>
+<h3>Step 6.2 — Run the API extraction</h3>
+<p>The source runbook calls Syniti v3 endpoints including rules, categories, data-quality-jobs, datastores, enforcements, implementations, subject-areas, systems and users. Pagination is followed until no new cursor is returned. The combined endpoint payload is inserted once per URL extension into <code>ApiResults</code>.</p>
+<pre><button class="copy">Copy</button><code># SECURITY-SAFE TEMPLATE — populate through approved secret handling
+$ApiUsername = '&lt;API_USERNAME&gt;'
+$ApiPassword = '&lt;API_PASSWORD&gt;'
+$SqlServer   = '&lt;SQL_SERVER_OR_INSTANCE&gt;'
+$SqlUser     = '&lt;SQL_USERNAME&gt;'
+$SqlPassword = '&lt;SQL_PASSWORD&gt;'
+
+$pair = "$ApiUsername`:$ApiPassword"
+$encoded = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
+$headers = @{ Authorization = "Basic $encoded" }
+
+$urls = @(
+  'https://api.syniti.eu/v3/rules',
+  'https://api.syniti.eu/v3/categories',
+  'https://api.syniti.eu/v3/data-quality-jobs',
+  'https://api.syniti.eu/v3/datastores',
+  'https://api.syniti.eu/v3/enforcements',
+  'https://api.syniti.eu/v3/implementations',
+  'https://api.syniti.eu/v3/subject-areas',
+  'https://api.syniti.eu/v3/systems',
+  'https://api.syniti.eu/v3/users'
+) | Select-Object -Unique
+
+$connectionString = "Server=$SqlServer;Database=WRKDQAPIUtilities;User Id=$SqlUser;Password=$SqlPassword;"
+$conn = New-Object System.Data.SqlClient.SqlConnection $connectionString
+$conn.Open()
+
+foreach ($url in $urls) {
+  try {
+    $urlExtension = ($url.TrimEnd('/')).Split('/')[-1]
+    $nextUrl = $url
+    $previousCursor = $null
+    $allData = @()
+    while ($nextUrl) {
+      $response = Invoke-RestMethod -Uri $nextUrl -Headers $headers -Method GET
+      if ($response.data) { $allData += $response.data }
+      if (-not $response.cursor -or $response.cursor -eq $previousCursor) { break }
+      $previousCursor = $response.cursor
+      $nextUrl = $url + '?cursor=' + $response.cursor
+    }
+    $finalObject = [PSCustomObject]@{ data=$allData; cursor='' }
+    $finalJson = $finalObject | ConvertTo-Json -Depth 10
+    $cmd = $conn.CreateCommand()
+    $cmd.CommandText = 'INSERT INTO ApiResults (URLExtension, JsonData) VALUES (@urlExt, @json)'
+    $cmd.Parameters.Add('@urlExt',[System.Data.SqlDbType]::NVarChar,200).Value = $urlExtension
+    $cmd.Parameters.Add('@json',[System.Data.SqlDbType]::NVarChar,-1).Value = $finalJson
+    [void]$cmd.ExecuteNonQuery()
+  } catch { Write-Host "Error with $url : $($_.Exception.Message)" }
+}
+$conn.Close()</code></pre>
+<div class="warn">The original Loop page contained plaintext API and SQL credentials and a project-specific SQL server address. They are redacted here. Rotate/revoke any credential that was exposed in plaintext if that has not already been done.</div>
+<h3>Step 6.3 — Archive raw ApiResults</h3>
+<pre><button class="copy">Copy</button><code>INSERT INTO [dbo].[ApiResults_History]
+    (URLExtension, JsonData, CreatedAt, WeekNumber, WeekYear, CapturedDate)
+SELECT URLExtension, JsonData, CreatedAt,
+       DATEPART(WEEK, CreatedAt), DATEPART(YEAR, CreatedAt), CAST(CreatedAt AS DATE)
+FROM [dbo].[ApiResults];</code></pre>
+<h3>Step 6.4 — Update GETAPIRESULTS</h3>
+<pre><button class="copy">Copy</button><code>DECLARE @ExtractID nvarchar(50) = 'TEST';
+UPDATE g
+SET g.GETRESULTS = a.JsonData,
+    g.LastUpdate = a.CreatedAt
+FROM dbo.GETAPIRESULTS g
+LEFT JOIN dbo.ApiResults a
+  ON g.URLEXTENSION = a.URLExtension
+WHERE g.ExtractID = @ExtractID;</code></pre>
+<h3>Step 6.5 — Archive GETAPIRESULTS</h3>
+<pre><button class="copy">Copy</button><code>INSERT INTO [dbo].[GETAPIRESULTS_History]
+ (ExtractID, URL, URLEXTENSION, TENANTID, TABLENAME, GETRESULTS,
+  APIUsername, APIPassword, APIPassword_BAK, TableOrder, Active,
+  LastUpdate, WeekNumber, WeekYear, CapturedDate)
+SELECT ExtractID, URL, URLEXTENSION, TENANTID, TABLENAME, GETRESULTS,
+       APIUsername, APIPassword, APIPassword_BAK, TableOrder, Active,
+       LastUpdate, DATEPART(WEEK, LastUpdate), DATEPART(YEAR, LastUpdate), CAST(GETDATE() AS DATE)
+FROM dbo.GETAPIRESULTS g
+WHERE NOT EXISTS (
+ SELECT 1 FROM dbo.GETAPIRESULTS_History h
+ WHERE h.ExtractID=g.ExtractID AND h.URLEXTENSION=g.URLEXTENSION
+   AND h.WeekNumber=DATEPART(WEEK,g.LastUpdate)
+   AND h.WeekYear=DATEPART(YEAR,g.LastUpdate));</code></pre>
+<h3>Step 6.6 — Populate JSON tables</h3>
+<pre><button class="copy">Copy</button><code>DECLARE @ExtractID nvarchar(50) = 'TEST';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'rules';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'dataqualityjobs';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'enforcements';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'implementations';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'systems';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'categories';
+EXEC webKnowledgeTierExtract_JSON_TABLES_Ins NULL,@ExtractID,'subjectareas';</code></pre>
+<h3>Step 6.7 — Archive transformed tables</h3>
+<pre><button class="copy">Copy</button><code>DECLARE @ExtractID nvarchar(50) = 'TEST';
+DECLARE @ProcessWeek int = DATEPART(WEEK,GETDATE());
+DECLARE @ProcessYear int = DATEPART(YEAR,GETDATE());
+EXEC dbo.webKnowledgeTierExtract_ArchiveToHistory
+     @ExtractID=@ExtractID,
+     @WeekNumber=@ProcessWeek,
+     @WeekYear=@ProcessYear;</code></pre>
+</section><section id="s7"><h2>7. Fully automated execution</h2>
+<p>After CLR/API execution has been approved and manual testing has succeeded, the source design identifies <code>DQReportsGeneralData_Ins</code> as the scheduler entry point for a complete run.</p>
+<ol><li>Verify the intended <code>ExtractID</code> configuration in <code>GETAPIRESULTS</code>.</li><li>Execute <code>DQReportsGeneralData_Ins</code> manually once in the destination environment.</li><li>Validate API updates, JSON tables, consumption views and history.</li><li>Only after successful validation, schedule the stored procedure using the approved SQL/enterprise scheduler.</li><li>Capture run status and alert on failures.</li></ol>
+<div class="note"><b>Do not assume the source schedule should be reused.</b> Frequency and execution window should match the destination project’s dashboard refresh requirement.</div>
+</section><section id="s8"><h2>8. Proxy execution variant</h2>
+<p>When outbound API access requires a proxy, the Loop documentation specifies a separate proxy-capable assembly and a change to <code>webKnowledgeTierExtract_GETAPIRESULTS_GETRESULTS_Upd</code>.</p>
+<ul><li>Deploy/validate the proxy-compatible assembly.</li><li>Configure proxy server/domain/username/password through secure configuration rather than reusable documentation.</li><li>Use the proxy API routine (<code>Syniti_API_Proxy</code>) instead of the non-proxy routine (<code>Syniti_API</code>) in the execution stored procedure.</li><li>Retest a single endpoint before enabling the complete process.</li></ul>
+</section><section id="s9"><h2>9. Validation after each run</h2>
+<table><tr><th>Checkpoint</th><th>Expected evidence</th></tr>
+<tr><td>ApiResults</td><td>One current JSON payload per configured URL extension after the PowerShell stage.</td></tr>
+<tr><td>ApiResults_History</td><td>Current extraction archived with week/year/date.</td></tr>
+<tr><td>GETAPIRESULTS</td><td>GETRESULTS and LastUpdate refreshed for the selected ExtractID.</td></tr>
+<tr><td>GETAPIRESULTS_History</td><td>No duplicate ExtractID + endpoint + week + year snapshot.</td></tr>
+<tr><td>JSON_* tables</td><td>Relational rows populated for the selected extraction.</td></tr>
+<tr><td>*_History tables</td><td>Current transformed snapshot archived.</td></tr>
+<tr><td>APIResults_Combined</td><td>Current dashboard-ready implementation records visible.</td></tr>
+<tr><td>Cloud Construct</td><td>Current-state grids and weekly trend datasets refresh successfully.</td></tr></table>
+</section><section id="s10"><h2>10. Operational troubleshooting</h2>
+<table><tr><th>Symptom</th><th>Likely area</th><th>Check</th></tr>
+<tr><td>APIResults stays empty</td><td>PowerShell/API/auth/network</td><td>Credential source, endpoint access, proxy, pagination errors and SQL insert connectivity.</td></tr>
+<tr><td>GETAPIRESULTS does not refresh</td><td>Endpoint naming</td><td>Compare ApiResults.URLExtension with GETAPIRESULTS.URLEXTENSION and the intended ExtractID.</td></tr>
+<tr><td>JSON table missing fields</td><td>API schema evolution</td><td>Update ImportJSONFile_* view plus current/history target table.</td></tr>
+<tr><td>Trend data missing</td><td>Archive step</td><td>Check *_History inserts, week/year parameters and weekly summary views.</td></tr>
+<tr><td>SQL API call fails but PowerShell works</td><td>CLR/proxy/assembly</td><td>Validate CLR configuration, assembly and outbound network path.</td></tr>
+<tr><td>Dashboard shows stale data</td><td>Execution chain</td><td>Compare LastUpdate, JSON table load time, consumption view and Cloud Construct dataset refresh.</td></tr></table>
+</section><section id="s11"><h2>11. Deployment and handover checklist</h2>
+<ul class="checks"><li><label><input type="checkbox"> Schema deployed and all required SQL objects compile.</label></li><li><label><input type="checkbox"> Destination API credentials obtained and stored securely.</label></li><li><label><input type="checkbox"> GETAPIRESULTS destination configuration completed.</label></li><li><label><input type="checkbox"> Required assembly/CLR or PowerShell execution path tested.</label></li><li><label><input type="checkbox"> One full manual run succeeds.</label></li><li><label><input type="checkbox"> Raw and transformed history validated.</label></li><li><label><input type="checkbox"> APIResults_Combined and dashboard views validated.</label></li><li><label><input type="checkbox"> Cloud Construct dashboard validated against SQL.</label></li><li><label><input type="checkbox"> Scheduling/ownership/support responsibilities documented.</label></li><li><label><input type="checkbox"> No reusable artifact contains production passwords, API secrets or project-specific credentials.</label></li></ul>
+</section></main><script>
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(b.parentElement.querySelector('code').innerText);let x=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=x,900)});
+let checks=[...document.querySelectorAll('input[type=checkbox]')],saved=JSON.parse(localStorage.getItem('wrkdq-backend-checks')||'[]');checks.forEach((c,i)=>{c.checked=!!saved[i];c.closest('li').classList.toggle('done',c.checked);c.onchange=()=>{c.closest('li').classList.toggle('done',c.checked);localStorage.setItem('wrkdq-backend-checks',JSON.stringify(checks.map(x=>x.checked)))}});
+search.oninput=e=>{let q=e.target.value.toLowerCase();document.querySelectorAll('main section').forEach((s,i)=>{if(i)s.classList.toggle('hidden',q&&!s.innerText.toLowerCase().includes(q))});document.querySelectorAll('aside a').forEach(a=>a.classList.toggle('hidden',q&&!a.dataset.q.includes(q)))};
+</script></body></html>
