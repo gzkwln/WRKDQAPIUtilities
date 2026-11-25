@@ -5,7 +5,7 @@
 ## Required execution order
 
 ```text
-100_wrkdqapiutilities_backend_schema_v1.0.0.sql
+100_wrkdqapiutilities_backend_schema_v2.0.0.sql
                     ↓
 110_wrkdqapiutilities_base_configuration_v1.0.0.sql
                     ↓
