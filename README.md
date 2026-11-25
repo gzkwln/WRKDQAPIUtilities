@@ -51,7 +51,7 @@ Cloud Construct datasets and WebApp
 
     Run:
 
-        100_wrkdqapiutilities_backend_schema_v1.0.0.sql
+        100_wrkdqapiutilities_backend_schema_v2.0.0.sql
 
     This file creates the WRKDQAPIUtilities backend objects, including the
     required tables, history tables, views, stored procedures, functions,
